@@ -99,8 +99,9 @@ void ConditionalMove(MipsIrContext& c, Op skip_if) {
     if (d.rd == 0u) return;
     cerfir::Builder& b    = *c.b;
     const uint32_t   skip = b.NewLabel();
-    b.Branch(b.Compare(skip_if, MipsIrRead64(c, d.rt), MipsIrConst64(c, 0u)), skip, true);
-    MipsIrWrite64(c, d.rd, MipsIrReadLo(c, d.rs), MipsIrReadHi(c, d.rs));
+    b.Branch(b.Compare(skip_if, MipsIrReadFull(c, d.rt), MipsIrFullConst(c, 0u)), skip, true);
+    if (c.wide_gprs) MipsIrWrite64(c, d.rd, MipsIrReadLo(c, d.rs), MipsIrReadHi(c, d.rs));
+    else             MipsIrWriteSext(c, d.rd, MipsIrReadLo(c, d.rs));
     b.Label(skip);
 }
 

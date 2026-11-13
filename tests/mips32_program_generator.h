@@ -24,8 +24,10 @@ class Mips32ProgramGenerator {
 public:
     Mips32ProgramGenerator(std::mt19937& rng, const cerfengine::MipsFeatures& f)
         : rng_(rng),
-          wide_(f.isa_level != cerfengine::MipsIsaLevel::kMips1),
-          movz_(f.isa_level == cerfengine::MipsIsaLevel::kMips4),
+          wide_(cerfengine::MipsHas64BitGprs(f.isa_level)),
+          eret_(f.isa_level != cerfengine::MipsIsaLevel::kMips1),
+          movz_(f.isa_level == cerfengine::MipsIsaLevel::kMips4 ||
+                f.isa_level == cerfengine::MipsIsaLevel::kMips32R1),
           madd_(f.tx39_multiply_add),
           power_(f.vr41xx_power_modes),
           mips16_(f.mips16),
@@ -236,7 +238,7 @@ private:
         switch (Pick(power_ ? 4u : 3u)) {
         case 0u:
         case 1u: return co | kTlb[Pick(4u)];
-        case 2u: return co | (wide_ ? F::kERET : F::kRFE);
+        case 2u: return co | (eret_ ? F::kERET : F::kRFE);
         default: return co | kPower[Pick(3u)];
         }
     }
@@ -254,7 +256,7 @@ private:
         case 0u:
             return (O::kCOP0 << 26) | (cerfengine::MipsCop0Rs::kCO << 21) |
                    (Pick(2u) == 0u ? cerfengine::MipsCop0Funct::kWAIT
-                                   : (wide_ ? cerfengine::MipsCop0Funct::kRFE
+                                   : (eret_ ? cerfengine::MipsCop0Funct::kRFE
                                             : cerfengine::MipsCop0Funct::kERET));
         case 1u: {
             const uint32_t op   = Pick(2u) == 0u ? O::kLL : O::kSC;
@@ -338,6 +340,7 @@ private:
 
     std::mt19937&         rng_;
     const bool            wide_;
+    const bool            eret_;
     const bool            movz_;
     const bool            madd_;
     const bool            power_;

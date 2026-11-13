@@ -56,7 +56,7 @@ uint32_t StartVa(std::mt19937& rng, uint32_t page_shift, uint32_t length, bool m
 
 Prepared Prepare(std::mt19937& rng, const Config& cfg, Mips32ProgramGenerator& gen32,
                  Mips16ProgramGenerator& gen16) {
-    const bool     wide   = cfg.features.isa_level != cerfengine::MipsIsaLevel::kMips1;
+    const bool     wide   = cerfengine::MipsHas64BitGprs(cfg.features.isa_level);
     const bool     mips16 = cfg.features.mips16 && MipsRigPick(rng, 2u) == 0u;
     const uint32_t length = 8u + MipsRigPick(rng, 40u);
     const uint32_t start  = StartVa(rng, cfg.page_shift, length, mips16);
@@ -167,7 +167,7 @@ void RunConfig(const Config& cfg) {
     MipsIrRig              u(cfg.features, cfg.page_shift, false);
     std::mt19937           rng(cfg.seed);
     Mips32ProgramGenerator gen32(rng, cfg.features);
-    Mips16ProgramGenerator gen16(rng, cfg.features.isa_level != cerfengine::MipsIsaLevel::kMips1);
+    Mips16ProgramGenerator gen16(rng, cerfengine::MipsHas64BitGprs(cfg.features.isa_level));
     const std::vector<uint32_t> end_loops = {0x1000FFFFu, 0u, 0u, 0u, 0x650017FFu};
     c.Load(kMipsRigEndVa, end_loops);
     u.Load(kMipsRigEndVa, end_loops);
@@ -238,10 +238,15 @@ int main(int argc, char**) {
     vr5500.features.isa_level = cerfengine::MipsIsaLevel::kMips4;
     vr5500.features.fpu       = true;
     vr5500.features.llsc      = true;
+    Config mips32r1{"mips32r1", {}, 12u, 3000u, 5u};
+    mips32r1.features.isa_level      = cerfengine::MipsIsaLevel::kMips32R1;
+    mips32r1.features.phys_addr_mask = 0x1FFFFFFFu;
+    mips32r1.features.llsc           = true;
     RunConfig(vr4121);
     RunConfig(vr4122);
     RunConfig(tx39);
     RunConfig(vr5500);
+    RunConfig(mips32r1);
     std::printf("mips_ir_diff_test passed\n");
     return 0;
 }

@@ -19,11 +19,12 @@ void MipsInsnDecoder::OnReady() {
     map_       = &engine_.Get<PhysicalMap>();
 
     auto& cfg = engine_.GetSetup().mips;
-    const bool has_64bit = cfg.isa_level != cerfengine::MipsIsaLevel::kMips1;
+    const bool has_64bit = MipsHas64BitGprs(cfg.isa_level);
     const bool has_eret  = cfg.isa_level != cerfengine::MipsIsaLevel::kMips1;
     const bool has_rfe   = cfg.isa_level == cerfengine::MipsIsaLevel::kMips1;
     decoder_.Configure(cfg.fpu, cfg.llsc,
-                       cfg.isa_level == cerfengine::MipsIsaLevel::kMips4,
+                       cfg.isa_level == MipsIsaLevel::kMips4 ||
+                           cfg.isa_level == MipsIsaLevel::kMips32R1,
                        cfg.vr41xx_power_modes,
                        has_64bit, has_eret, has_rfe, cfg.mips16,
                        cfg.tx39_multiply_add, cfg.cop1_cop2_unusable);

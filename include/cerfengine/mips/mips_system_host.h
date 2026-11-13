@@ -75,6 +75,7 @@ public:
     virtual ~MipsSystemHost() = default;
 
     virtual MipsCp0Decision MipsCp0(uint32_t rd)        = 0;
+    virtual MipsCp0Decision MipsCp0(uint32_t rd, uint32_t sel);
     virtual void            MipsReset(MipsCpuState* st) = 0;
 };
 

@@ -146,7 +146,7 @@ void MipsIrCodegen::OnReady() {
     host_                      = &engine_.Host();
     verify_                    = engine_.GetSetup().verify_ir;
     system_                    = engine_.GetSetup().mips_system;
-    wide_gprs_                 = engine_.GetSetup().mips.isa_level != MipsIsaLevel::kMips1;
+    wide_gprs_                 = MipsHas64BitGprs(engine_.GetSetup().mips.isa_level);
     model_.cycle_slot          = static_cast<int32_t>(offsetof(MipsCpuState, guest_cycle_counter));
     cerfir::ExitModel& e       = model_.exits;
     e.chain                    = true;

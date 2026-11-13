@@ -28,11 +28,12 @@ using cerfir::Type;
 /* QEMU MIPS translate.c gen_mfc0_load32: gpr[rt] = sext32(cp0[rd]). */
 void FromCop0(MipsIrContext& c) {
     const MipsDecodedInsn& d = *c.d;
-    if ((d.raw & 0x7u) != 0u) {
+    const uint32_t sel = d.raw & 0x7u;
+    if (sel != 0u && c.block->emit->CpuConfig()->isa_level != MipsIsaLevel::kMips32R1) {
         MipsIrUndefined(c);
         return;
     }
-    const MipsCp0Decision dec = c.codegen->System()->MipsCp0(d.rd);
+    const MipsCp0Decision dec = c.codegen->System()->MipsCp0(d.rd, sel);
     if (!dec.present) {
         MipsIrUndefined(c);
         return;
@@ -51,11 +52,12 @@ void FromCop0(MipsIrContext& c) {
 void ToCop0(MipsIrContext& c, bool is_dword) {
     const MipsDecodedInsn& d = *c.d;
     cerfir::Builder&       b = *c.b;
-    if ((d.raw & 0x7u) != 0u) {
+    const uint32_t sel = d.raw & 0x7u;
+    if (sel != 0u && c.block->emit->CpuConfig()->isa_level != MipsIsaLevel::kMips32R1) {
         MipsIrUndefined(c);
         return;
     }
-    const MipsCp0Decision dec = c.codegen->System()->MipsCp0(d.rd);
+    const MipsCp0Decision dec = c.codegen->System()->MipsCp0(d.rd, sel);
     if (!dec.present) {
         MipsIrUndefined(c);
         return;
@@ -85,7 +87,7 @@ void ToCop0(MipsIrContext& c, bool is_dword) {
         b.Label(ok);
     }
     MipsMmu* const mmu = c.block->emit->Mmu();
-    if (d.rd == MipsCp0::kStatus && mmu->ErlMask() != 0u) {
+    if (d.rd == MipsCp0::kStatus && sel == 0u && mmu->ErlMask() != 0u) {
         const uint32_t clear = b.NewLabel();
         const Ref      erl   = b.Op2(Op::kAnd, MipsIrReadLo(c, d.rt), b.Const32(mmu->ErlMask()));
         b.Branch(b.Compare(Op::kCmpEq, erl, b.Const32(0u)), clear, true);

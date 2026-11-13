@@ -49,7 +49,11 @@ struct ArmFeatures {
     uint32_t mvfr1                    = 0;
 };
 
-enum class MipsIsaLevel : uint32_t { kMips1, kMips3, kMips4 };
+enum class MipsIsaLevel : uint32_t { kMips1, kMips3, kMips4, kMips32R1 };
+
+constexpr bool MipsHas64BitGprs(MipsIsaLevel level) {
+    return level == MipsIsaLevel::kMips3 || level == MipsIsaLevel::kMips4;
+}
 
 struct MipsFeatures {
     MipsIsaLevel isa_level  = MipsIsaLevel::kMips1;
