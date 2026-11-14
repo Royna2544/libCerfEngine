@@ -1,5 +1,6 @@
 #include "test_arm_system.h"
 #include "test_host.h"
+#include "test_mips_system.h"
 
 #include <cerfengine/arm/arm_cpu.h>
 #include <cerfengine/arm/arm_instruction_timing.h>
@@ -76,11 +77,35 @@ void WideMultiply() {
     TEST_CHECK(hi == 0xFFFFFFFFFFFFFFFEull);
 }
 
+void MipsSetupStarts() {
+    TestHost host(0x1FC00000u, 0x00010000u, 0x10000000u);
+    TestMipsSystem system(0xBFC00000u);
+    cerfengine::MipsSystemHost& legacy = system;
+    TEST_CHECK(!legacy.MipsCp0(16u, 1u).present);
+
+    cerfengine::Setup setup;
+    setup.isa = cerfengine::Isa::kMips;
+    setup.mips.isa_level = cerfengine::MipsIsaLevel::kMips32R1;
+    host.Attach(setup);
+    system.Attach(setup);
+
+    cerfengine::Engine engine(setup);
+    std::string error;
+    const bool started = engine.Start(error);
+#if CERFENGINE_TEST_BACKEND
+    if (!started) TestFail("Start: %s", error.c_str());
+#else
+    TEST_CHECK(!started);
+    TEST_CHECK(error == "this build of libCerfEngine has no execution backend for the host");
+#endif
+}
+
 }
 
 int main() {
     NoHostIsRefused();
     ArmSetupStarts();
+    MipsSetupStarts();
     WideMultiply();
     std::printf("api_test passed\n");
     return 0;

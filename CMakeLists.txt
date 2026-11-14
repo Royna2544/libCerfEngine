@@ -68,7 +68,7 @@ else()
     set(cerfengine_execution_backend OFF)
 endif()
 
-set(cerfengine_sources src/engine.cpp src/host_exception.cpp)
+set(cerfengine_sources src/engine.cpp src/host_exception.cpp src/mips/mips_system_host.cpp)
 if(cerfengine_backend_x86_win32)
     list(APPEND cerfengine_sources src/host_platform_win32.cpp)
 elseif(cerfengine_backend_x86_64_sysv OR cerfengine_backend_a64_linux)
@@ -86,6 +86,8 @@ endif()
 if(cerfengine_translator)
     file(GLOB_RECURSE cerfengine_translator_sources CONFIGURE_DEPENDS
          "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+    list(REMOVE_ITEM cerfengine_translator_sources
+         "${CMAKE_CURRENT_SOURCE_DIR}/src/mips/mips_system_host.cpp")
     list(FILTER cerfengine_translator_sources EXCLUDE REGEX
          "/src/(engine|host_exception|host_platform_[a-z0-9_]+|[a-z0-9_]+_(posix|default))\\.cpp$")
     if(cerfengine_host_isa STREQUAL "x86")
