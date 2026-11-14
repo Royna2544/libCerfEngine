@@ -35,7 +35,7 @@ Kind Cop0Kind(const MipsDecodedInsn* d) {
 void MipsDecoder::Configure(bool has_fpu, bool has_llsc, bool has_mips4,
                             bool has_vr41xx_power_modes, bool has_64bit, bool has_eret,
                             bool has_rfe, bool has_mips16, bool has_tx39_multiply_add,
-                            bool has_cop1_cop2_unusable) {
+                            bool has_cop1_cop2_unusable, bool has_mips32r1) {
     has_cop1_cop2_unusable_ = has_cop1_cop2_unusable;
     has_fpu_                = has_fpu;
     has_llsc_               = has_llsc;
@@ -46,6 +46,7 @@ void MipsDecoder::Configure(bool has_fpu, bool has_llsc, bool has_mips4,
     has_rfe_                = has_rfe;
     has_mips16_             = has_mips16;
     has_tx39_multiply_add_  = has_tx39_multiply_add;
+    has_mips32r1_           = has_mips32r1;
     for (uint32_t i = 0; i < 64u; ++i) {
         primary_[i] = ClassifyPrimary(i);
         special_[i] = ClassifySpecial(i);
@@ -198,19 +199,31 @@ MipsDecoder::Entry MipsDecoder::ClassifyRegimm(uint32_t rt) const {
     }
 }
 
+MipsInsnKind MipsDecoder::ClassifySpecial2(const MipsDecodedInsn& d) const {
+    if (d.sa != 0u) return Kind::kUndefined;
+    if (d.funct == MipsSpecial2::kMADD || d.funct == MipsSpecial2::kMADDU) {
+        if (!has_tx39_multiply_add_ && !(has_mips32r1_ && d.rd == 0u))
+            return Kind::kUndefined;
+        return d.funct == MipsSpecial2::kMADD ? Kind::kMadd : Kind::kMaddu;
+    }
+    if (!has_mips32r1_) return Kind::kUndefined;
+    switch (d.funct) {
+    case MipsSpecial2::kMUL: return Kind::kMul;
+    case MipsSpecial2::kMSUB: return d.rd == 0u ? Kind::kMsub : Kind::kUndefined;
+    case MipsSpecial2::kMSUBU: return d.rd == 0u ? Kind::kMsubu : Kind::kUndefined;
+    case MipsSpecial2::kCLZ: return d.rt == d.rd ? Kind::kClz : Kind::kUndefined;
+    case MipsSpecial2::kCLO: return d.rt == d.rd ? Kind::kClo : Kind::kUndefined;
+    default: return Kind::kUndefined;
+    }
+}
+
 bool MipsDecoder::DecodeRare(MipsDecodedInsn* d) const {
     d->is_branch = 0;
     d->is_likely = 0;
     bool recognized = false;
     if (d->op == MipsOp::kSPECIAL2) {
-        /* MADD / MADDU: rs, rt, rd, bits 10..6 zero, funct 000000 / 000001 (TMPR39xx-um
-           p.155-156). */
-        recognized = has_tx39_multiply_add_ && d->sa == 0 &&
-                     (d->funct == MipsSpecial2::kMADD || d->funct == MipsSpecial2::kMADDU);
-        d->kind = !recognized                         ? Kind::kUndefined
-                  : d->funct == MipsSpecial2::kMADD   ? Kind::kMadd
-                                                      : Kind::kMaddu;
-        return recognized;
+        d->kind = ClassifySpecial2(*d);
+        return d->kind != Kind::kUndefined;
     }
     if (d->rs >= MipsCop0Rs::kCO &&
         ((d->funct == MipsCop0Funct::kERET && has_eret_) ||

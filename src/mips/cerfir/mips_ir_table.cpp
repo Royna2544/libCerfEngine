@@ -104,6 +104,11 @@ constexpr std::array<MipsIrTranslateFn, kMipsInsnKindCount> BuildTranslateTable(
     set(MipsInsnKind::kMult,          &MipsIrMult);
     set(MipsInsnKind::kMadd,          &MipsIrMadd);
     set(MipsInsnKind::kMaddu,         &MipsIrMaddu);
+    set(MipsInsnKind::kMul,           &MipsIrMul);
+    set(MipsInsnKind::kMsub,          &MipsIrMsub);
+    set(MipsInsnKind::kMsubu,         &MipsIrMsubu);
+    set(MipsInsnKind::kClz,           &MipsIrClz);
+    set(MipsInsnKind::kClo,           &MipsIrClo);
     set(MipsInsnKind::kMfhi,          &MipsIrMfhi);
     set(MipsInsnKind::kMflo,          &MipsIrMflo);
     set(MipsInsnKind::kMthi,          &MipsIrMthi);

@@ -63,7 +63,8 @@ constexpr uint8_t kSlotWritesRt   = 3u;
 constexpr std::array<uint8_t, kMipsInsnKindCount> DelaySlotClasses() {
     std::array<uint8_t, kMipsInsnKindCount> classes{};
     for (MipsInsnKind k : {MipsInsnKind::kNop, MipsInsnKind::kCache, MipsInsnKind::kMthi,
-                           MipsInsnKind::kMtlo, MipsInsnKind::kMult, MipsInsnKind::kMultu}) {
+                           MipsInsnKind::kMtlo, MipsInsnKind::kMult, MipsInsnKind::kMultu,
+                           MipsInsnKind::kMsub, MipsInsnKind::kMsubu}) {
         classes[static_cast<size_t>(k)] = kSlotWritesNone;
     }
     for (MipsInsnKind k : {MipsInsnKind::kAddu,  MipsInsnKind::kSubu,   MipsInsnKind::kAnd,
@@ -74,7 +75,8 @@ constexpr std::array<uint8_t, kMipsInsnKindCount> DelaySlotClasses() {
                            MipsInsnKind::kMflo,  MipsInsnKind::kMadd,   MipsInsnKind::kMaddu,
                            MipsInsnKind::kDaddu, MipsInsnKind::kDsubu,  MipsInsnKind::kDsll,
                            MipsInsnKind::kDsrl,  MipsInsnKind::kDsra,   MipsInsnKind::kDsll32,
-                           MipsInsnKind::kDsrl32, MipsInsnKind::kDsra32}) {
+                           MipsInsnKind::kDsrl32, MipsInsnKind::kDsra32, MipsInsnKind::kMul,
+                           MipsInsnKind::kClz, MipsInsnKind::kClo}) {
         classes[static_cast<size_t>(k)] = kSlotWritesRd;
     }
     for (MipsInsnKind k : {MipsInsnKind::kAddiu, MipsInsnKind::kLui,   MipsInsnKind::kOri,

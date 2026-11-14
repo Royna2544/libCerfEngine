@@ -122,6 +122,11 @@ namespace MipsSpecial {
 namespace MipsSpecial2 {      /* funct, bits 5..0 (op == SPECIAL2; TMPR39xx-um p.155-156) */
     constexpr uint32_t kMADD    = 0x00;
     constexpr uint32_t kMADDU   = 0x01;
+    constexpr uint32_t kMUL     = 0x02;
+    constexpr uint32_t kMSUB    = 0x04;
+    constexpr uint32_t kMSUBU   = 0x05;
+    constexpr uint32_t kCLZ     = 0x20;
+    constexpr uint32_t kCLO     = 0x21;
 }
 
 namespace MipsRegimm {

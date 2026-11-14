@@ -126,6 +126,11 @@ enum class MipsInsnKind : uint8_t {
     kMips16Ldpc,
     kCache,
     kCopUnusable,
+    kMul,
+    kMsub,
+    kMsubu,
+    kClz,
+    kClo,
     kCount,
 };
 

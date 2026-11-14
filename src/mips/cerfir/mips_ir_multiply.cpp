@@ -18,13 +18,11 @@ void Wide(MipsIrContext& c, Op op) {
     MipsIrWriteHiLo(c, MipsHiDisp(), b.Hi32(p));
 }
 
-/* TMPR39xx-um p.155-156: t <- (HI || LO) + GPR[rs] * GPR[rt]; LO <- t31..0;
-   HI <- t63..32; GPR[rd] <- t31..0. */
-void MultiplyAdd(MipsIrContext& c, Op op) {
+void MultiplyAccumulate(MipsIrContext& c, Op multiply, Op accumulate) {
     cerfir::Builder& b   = *c.b;
-    const Ref        p   = b.Wide64(op, MipsIrReadLo(c, c.d->rs), MipsIrReadLo(c, c.d->rt));
+    const Ref        p   = b.Wide64(multiply, MipsIrReadLo(c, c.d->rs), MipsIrReadLo(c, c.d->rt));
     const Ref        acc = b.Pair(b.ReadSlot(MipsLoDisp()), b.ReadSlot(MipsHiDisp()));
-    const Ref        t   = b.Op2(Op::kAdd, p, acc);
+    const Ref        t   = b.Op2(accumulate, acc, p);
     const Ref        lo  = b.Lo32(t);
     if (c.d->rd != 0u) b.Dup(lo);
     MipsIrWriteHiLo(c, MipsLoDisp(), lo);
@@ -53,8 +51,16 @@ void MoveTo(MipsIrContext& c, uint32_t disp) {
 
 void MipsIrMult(MipsIrContext& c) { Wide(c, Op::kMulS64); }
 void MipsIrMultu(MipsIrContext& c) { Wide(c, Op::kMulU64); }
-void MipsIrMadd(MipsIrContext& c) { MultiplyAdd(c, Op::kMulS64); }
-void MipsIrMaddu(MipsIrContext& c) { MultiplyAdd(c, Op::kMulU64); }
+void MipsIrMadd(MipsIrContext& c) { MultiplyAccumulate(c, Op::kMulS64, Op::kAdd); }
+void MipsIrMaddu(MipsIrContext& c) { MultiplyAccumulate(c, Op::kMulU64, Op::kAdd); }
+void MipsIrMsub(MipsIrContext& c) { MultiplyAccumulate(c, Op::kMulS64, Op::kSub); }
+void MipsIrMsubu(MipsIrContext& c) { MultiplyAccumulate(c, Op::kMulU64, Op::kSub); }
+
+void MipsIrMul(MipsIrContext& c) {
+    if (c.d->rd == 0u) return;
+    MipsIrWriteSext(c, c.d->rd,
+                   c.b->Op2(Op::kMul, MipsIrReadLo(c, c.d->rs), MipsIrReadLo(c, c.d->rt)));
+}
 void MipsIrDiv(MipsIrContext& c) { Wide(c, Op::kDivRemS32); }
 void MipsIrDivu(MipsIrContext& c) { Wide(c, Op::kDivRemU32); }
 

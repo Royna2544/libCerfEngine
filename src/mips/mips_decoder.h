@@ -12,7 +12,8 @@ class MipsDecoder {
 public:
     void Configure(bool has_fpu, bool has_llsc, bool has_mips4, bool has_vr41xx_power_modes,
                    bool has_64bit, bool has_eret, bool has_rfe, bool has_mips16,
-                   bool has_tx39_multiply_add, bool has_cop1_cop2_unusable);
+                   bool has_tx39_multiply_add, bool has_cop1_cop2_unusable,
+                   bool has_mips32r1);
 
     CERFENGINE_FORCEINLINE bool Decode(uint32_t word, uint32_t pc, MipsDecodedInsn* d) const {
         const uint32_t op = word >> 26;
@@ -58,6 +59,7 @@ private:
     Entry ClassifyPrimary(uint32_t op) const;
     Entry ClassifySpecial(uint32_t funct) const;
     Entry ClassifyRegimm(uint32_t rt) const;
+    MipsInsnKind ClassifySpecial2(const MipsDecodedInsn& d) const;
     bool  DecodeRare(MipsDecodedInsn* d) const;
 
     Entry primary_[64]{};
@@ -74,6 +76,7 @@ private:
     bool has_mips16_             = false;
     bool has_tx39_multiply_add_  = false;
     bool has_cop1_cop2_unusable_ = false;
+    bool has_mips32r1_           = false;
 };
 
 }
