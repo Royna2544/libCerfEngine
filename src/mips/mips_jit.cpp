@@ -12,9 +12,12 @@
 #include "mips_memory_access.h"
 #include <cerfengine/mips/mips_mmu.h>
 #include <cerfengine/physical_map.h>
-#include "mips_translation_cache.h"
 #include "cerfir/mips_ir_codegen.h"
 #include "mips_soft_tlb.h"
+#include "mips_translation_cache.h"
+#include <cerfengine/cycle_deadline.h>
+
+#include <atomic>
 
 namespace cerfengine {
 
@@ -61,18 +64,18 @@ bool MipsJit::ResetPending() const { return channel_->ResetRequested(); }
 
 void MipsJit::SetHostChainExit(bool requested) { channel_->SetHostExit(requested); }
 
-GuestEngine::RunStatus MipsJit::Run() {
+MipsJit::BlockPrep MipsJit::PrepareBlock(uint32_t& pc, void*& native) {
     channel_->ConsumeChainExit();
     if (channel_->DispatchRequests() != 0u) {
         const uint32_t req   = channel_->TakeDispatchRequests();
         const bool     reset = (req & MipsInterruptChannel::kDispatchReset) != 0u;
         if (reset) DeliverReset();
         if (req & MipsInterruptChannel::kDispatchHostClock) host_requests_->RunListeners();
-        if (reset) return RunStatus::kRunning;
+        if (reset) return BlockPrep::kReturn;
     }
 
     if (cpu_state_->idle_wait != MipsIdle::kNone && !channel_->ResumeIdle()) {
-        return RunStatus::kRunning;
+        return BlockPrep::kReturn;
     }
 
     mem_access_->DeliverDueClockEvents();
@@ -81,38 +84,51 @@ GuestEngine::RunStatus MipsJit::Run() {
     cpu_state_->cp0_cause = (cpu_state_->cp0_cause & ~device_mask) |
                             (channel_->Level() & device_mask);
 
-    uint32_t pc        = 0;
-    uint32_t privilege = 0;
-    void*    native    = nullptr;
+    native = nullptr;
     if (cpu_state_->branch_state != MipsBranch::kNone) {
-        pc            = cpu_state_->pc;
-        privilege     = cpu_->Privilege();
-        auto compile = [this, pc, privilege, &native] {
+        pc                       = cpu_state_->pc;
+        const uint32_t privilege = cpu_->Privilege();
+        auto compile = [this, &pc, privilege, &native] {
             native = compiler_->CompilePendingEntry(pc, privilege);
         };
-        if (!platform::CallHaltGuarded(compile)) return RunStatus::kHalted;
-        if (!native) return RunStatus::kRunning;
-        goto dispatch;
-    } else if (exceptions_->InterruptReady()) {
-        exceptions_->DeliverInterrupt();
+        if (!platform::CallHaltGuarded(compile)) return BlockPrep::kHalted;
+        return native ? BlockPrep::kEnter : BlockPrep::kReturn;
     }
+    if (exceptions_->InterruptReady()) exceptions_->DeliverInterrupt();
 
-    pc        = cpu_state_->pc;
-    privilege = cpu_->Privilege();
-    native    = compiler_->FindBlockNativeStart(pc, privilege);
+    pc                       = cpu_state_->pc;
+    const uint32_t privilege = cpu_->Privilege();
+    native                   = compiler_->FindBlockNativeStart(pc, privilege);
     if (!native) {
         compiler_->SetPredecessor(predecessor_va_);
-        void* compiled = nullptr;
-        auto  compile  = [this, pc, privilege, &compiled] {
-            compiled = compiler_->Compile(pc, privilege);
+        auto compile = [this, &pc, privilege, &native] {
+            native = compiler_->Compile(pc, privilege);
         };
-        if (!platform::CallHaltGuarded(compile)) return RunStatus::kHalted;
-        native = compiled;
-        if (!native) return RunStatus::kRunning;
+        if (!platform::CallHaltGuarded(compile)) return BlockPrep::kHalted;
+        if (!native) return BlockPrep::kReturn;
     }
     predecessor_va_ = pc;
+    return BlockPrep::kEnter;
+}
 
-dispatch:
+bool MipsJit::RunnerNeedsControl() const {
+    const uint32_t exit = std::atomic_ref<uint32_t>(cpu_state_->chain_exit_request)
+                              .load(std::memory_order_acquire);
+    return (exit & MipsChainExit::kHost) != 0u || cpu_state_->deep_sleep != 0 ||
+           cpu_state_->idle_wait != MipsIdle::kNone;
+}
+
+GuestEngine::RunStatus MipsJit::Run() {
+    uint32_t pc     = cpu_state_->pc;
+    void*    native = nullptr;
+    switch (PrepareBlock(pc, native)) {
+    case BlockPrep::kHalted:
+        return RunStatus::kHalted;
+    case BlockPrep::kReturn:
+        return RunStatus::kRunning;
+    case BlockPrep::kEnter:
+        break;
+    }
 #if CERFENGINE_BACKEND_X86_WIN32
     {
         __try {
@@ -129,9 +145,41 @@ dispatch:
 #elif CERFENGINE_GUARDED_DISPATCH
     MipsSoftTlbState* const soft_state = soft_tlb_->State();
     auto enter = [&] { cerfir::HostEnterBlock(native, cpu_state_, soft_state, entry_stub_); };
+    return EnterGuarded(enter, pc, RunStatus::kRunning);
+#else
+    block_entry_->PanicWithoutBackend(pc);
+#endif
+}
+
+GuestEngine::RunStatus MipsJit::RunSlice() {
+#if CERFENGINE_GUARDED_DISPATCH && !CERFENGINE_BACKEND_X86_WIN32
+    constexpr uint32_t kBlocksPerSlice = 1024u;
+    MipsSoftTlbState* const soft_state = soft_tlb_->State();
+    uint32_t  pc     = cpu_state_->pc;
+    void*     native = nullptr;
+    RunStatus status = RunStatus::kRunning;
+    auto slice = [&] {
+        for (uint32_t n = 0u; n < kBlocksPerSlice; ++n) {
+            const BlockPrep prep = PrepareBlock(pc, native);
+            if (prep == BlockPrep::kHalted) status = RunStatus::kHalted;
+            if (prep != BlockPrep::kEnter) return;
+            cerfir::HostEnterBlock(native, cpu_state_, soft_state, entry_stub_);
+            if (RunnerNeedsControl()) return;
+        }
+    };
+    return EnterGuarded(slice, pc, status);
+#else
+    return Run();
+#endif
+}
+
+#if CERFENGINE_GUARDED_DISPATCH && !CERFENGINE_BACKEND_X86_WIN32
+template <typename Fn>
+GuestEngine::RunStatus MipsJit::EnterGuarded(Fn& fn, uint32_t& pc, const RunStatus& returned) {
     platform::HostFault fault{};
-    switch (block_entry_->Enter(enter, pc, fault)) {
+    switch (block_entry_->Enter(fn, pc, fault)) {
     case BlockExit::kReturned:
+        return returned;
     case BlockExit::kGuestUnwind:
         return RunStatus::kRunning;
     case BlockExit::kHalted:
@@ -140,10 +188,8 @@ dispatch:
         break;
     }
     block_entry_->ReportHostFault("MipsJit", fault, pc);
-#else
-    block_entry_->PanicWithoutBackend(pc);
-#endif
 }
+#endif
 
 void MipsJit::DeliverReset() {
     host_->OnResetDelivered();

@@ -38,6 +38,7 @@ public:
     void PrepareStateSave();
 
     RunStatus Run() override;
+    RunStatus RunSlice() override;
     bool      DeepSleep()    const override { return cpu_state_->deep_sleep != 0; }
     bool      ResetPending() const override;
     void      SetHostChainExit(bool requested) override;
@@ -60,7 +61,13 @@ public:
     void SetDmaRegion(uint32_t pa, uint32_t size) override;
 
 private:
-    void DeliverReset();
+    enum class BlockPrep : uint8_t { kEnter, kReturn, kHalted };
+
+    BlockPrep PrepareBlock(uint32_t& pc, void*& native);
+    template <typename Fn>
+    RunStatus EnterGuarded(Fn& fn, uint32_t& pc, const RunStatus& returned);
+    bool      RunnerNeedsControl() const;
+    void      DeliverReset();
 
     MipsCpuState* cpu_state_      = nullptr;
     uint32_t      predecessor_va_ = 0;

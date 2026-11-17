@@ -14,6 +14,7 @@ public:
     enum class RunStatus : uint32_t { kRunning, kHalted };
 
     virtual RunStatus Run()                = 0;
+    virtual RunStatus RunSlice() { return Run(); }
     virtual bool      DeepSleep()    const = 0;
     virtual bool      ResetPending() const = 0;
     virtual uint32_t  Pc()           const = 0;

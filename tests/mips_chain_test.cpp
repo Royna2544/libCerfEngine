@@ -164,6 +164,13 @@ public:
         return jit_->Run();
     }
 
+    RunStatus Slice(uint32_t budget = kBudget) {
+        cerfengine::MipsCpuState& s = State();
+        s.guest_cycle_deadline      = cerfengine::CycleDeadline(s.guest_cycle_counter, budget);
+        ++steps_;
+        return jit_->RunSlice();
+    }
+
     void RunTo(uint32_t pc, uint32_t max_steps) {
         steps_ = 0u;
         while (State().pc != pc) {
@@ -260,6 +267,38 @@ void TestInterruptKick() {
     TEST_CHECK((rig.State().cp0_cause & kIp2) != 0u);
     rig.RunTo(kEnd, 3u);
     TEST_CHECK(rig.State().gpr[2] == 1000u);
+}
+
+void TestSliceRunsUntilHostExit() {
+    ChainRig rig(Mips3());
+    uint32_t accesses = 0;
+    rig.Host().RaiseIrqOnMmio([&rig, &accesses] {
+        if (++accesses == 100u) rig.Jit().SetHostChainExit(true);
+    });
+    rig.Load(kBase, CountLoop(true));
+    rig.State().gpr[27] = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(kMmioVa)));
+    TEST_CHECK(rig.Slice() == RunStatus::kRunning);
+    TEST_CHECK(rig.State().gpr[2] == 100u);
+    TEST_CHECK(rig.State().pc == kBase + 8u);
+    TEST_CHECK(rig.Slice() == RunStatus::kRunning);
+    TEST_CHECK(rig.State().gpr[2] == 101u);
+    rig.Jit().SetHostChainExit(false);
+    rig.RunTo(kEnd, 3u);
+    TEST_CHECK(rig.State().gpr[2] == 1000u);
+}
+
+void TestSliceEndsOnDeepSleep() {
+    ChainRig rig(Mips3());
+    uint32_t accesses = 0;
+    rig.Host().RaiseIrqOnMmio([&rig, &accesses] {
+        if (++accesses == 100u) rig.Jit().EnterDeepSleep();
+    });
+    rig.Load(kBase, CountLoop(true));
+    rig.State().gpr[27] = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(kMmioVa)));
+    TEST_CHECK(rig.Slice() == RunStatus::kRunning);
+    TEST_CHECK(rig.State().gpr[2] == 100u);
+    TEST_CHECK(rig.State().pc == kBase + 8u);
+    TEST_CHECK(rig.Jit().DeepSleep());
 }
 
 void TestPowerRequestKicks() {
@@ -462,6 +501,8 @@ int main() {
     TestDeadlinePoll();
     TestHostExit();
     TestInterruptKick();
+    TestSliceRunsUntilHostExit();
+    TestSliceEndsOnDeepSleep();
     TestPowerRequestKicks();
     TestClockEventKick();
     TestStatusWriteEndsBlock();
