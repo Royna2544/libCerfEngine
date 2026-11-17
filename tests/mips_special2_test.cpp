@@ -42,10 +42,6 @@ cerfengine::MipsCpuState Initial(uint32_t a, uint32_t b, uint64_t acc) {
     return s;
 }
 
-uint64_t Sext(uint32_t v) {
-    return static_cast<uint64_t>(static_cast<int64_t>(std::bit_cast<int32_t>(v)));
-}
-
 void ProductsAndAccumulators(bool verify) {
     MipsIrRig rig(Features(), 12u, verify);
     std::vector<std::array<uint32_t, 2>> pairs = {
@@ -82,7 +78,7 @@ void ProductsAndAccumulators(bool verify) {
         const uint32_t expected = static_cast<uint32_t>(static_cast<uint64_t>(a) * b);
         for (uint32_t rd : {0u, 1u, 2u, 3u}) {
             Execute(rig, Special2(1u, 2u, rd, 2u), Initial(a, b, 0u));
-            TEST_CHECK(rig.State().gpr[rd] == (rd == 0u ? 0u : Sext(expected)));
+            TEST_CHECK(static_cast<uint32_t>(rig.State().gpr[rd]) == (rd == 0u ? 0u : expected));
         }
     }
 }
@@ -100,7 +96,7 @@ void LeadingBits(bool verify) {
                 ? std::countl_zero(value) : std::countl_one(value));
             for (uint32_t rd : {0u, 1u, 3u}) {
                 Execute(rig, Special2(1u, rd, rd, fn), Initial(value, 0u, 0u));
-                TEST_CHECK(rig.State().gpr[rd] == (rd == 0u ? 0u : expected));
+                TEST_CHECK(static_cast<uint32_t>(rig.State().gpr[rd]) == (rd == 0u ? 0u : expected));
             }
         }
     }
@@ -117,11 +113,11 @@ void ZeroSources(bool verify) {
     }
     for (uint32_t rs : {0u, 1u}) {
         Execute(rig, Special2(rs, 1u - rs, 3u, 2u), Initial(0xFFFFFFFFu, 3u, 11u));
-        TEST_CHECK(rig.State().gpr[3] == 0u);
+        TEST_CHECK(static_cast<uint32_t>(rig.State().gpr[3]) == 0u);
     }
     for (uint32_t fn : {32u, 33u}) {
         Execute(rig, Special2(0u, 3u, 3u, fn), Initial(0xFFFFFFFFu, 3u, 11u));
-        TEST_CHECK(rig.State().gpr[3] == (fn == 32u ? 32u : 0u));
+        TEST_CHECK(static_cast<uint32_t>(rig.State().gpr[3]) == (fn == 32u ? 32u : 0u));
     }
 }
 
@@ -193,7 +189,7 @@ void RejectionAndLegacy(bool verify) {
         Execute(tx39, Special2(1u, 2u, 3u, fn), Initial(3u, 7u, 10u));
         TEST_CHECK(static_cast<uint32_t>(tx39.State().lo) == 31u);
         TEST_CHECK(static_cast<uint32_t>(tx39.State().hi) == 0u);
-        TEST_CHECK(tx39.State().gpr[3] == 31u);
+        TEST_CHECK(static_cast<uint32_t>(tx39.State().gpr[3]) == 31u);
     }
 }
 

@@ -93,25 +93,47 @@ CERFENGINE_FORCEINLINE cerfir::Ref MipsIrFullConst(MipsIrContext& c, uint64_t se
                        : c.b->Const32(static_cast<uint32_t>(sext_value));
 }
 
+CERFENGINE_FORCEINLINE void MipsIrSetSext(MipsIrContext& c, uint32_t disp, cerfir::Ref lo) {
+    if (c.wide_gprs) c.b->SetSlotSext(disp, lo);
+    else             c.b->SetSlot(disp, lo);
+}
+
+CERFENGINE_FORCEINLINE void MipsIrComputeSext(MipsIrContext& c, cerfir::Op op, cerfir::Ref a,
+                                              cerfir::Ref b, uint32_t disp) {
+    if (c.wide_gprs) c.b->ComputeIntoSext(op, a, b, disp);
+    else             c.b->ComputeInto(op, a, b, cerfir::kNoRef, 0u, disp);
+}
+
+CERFENGINE_FORCEINLINE void MipsIrComputeSlotSext(MipsIrContext& c, cerfir::Op op, uint32_t a_disp,
+                                                  cerfir::Ref b, uint32_t disp) {
+    if (c.wide_gprs) c.b->ComputeSlotInto<true>(op, a_disp, b, 0u, disp);
+    else             c.b->ComputeSlotInto<false>(op, a_disp, b, 0u, disp);
+}
+
 CERFENGINE_FORCEINLINE void MipsIrWriteSext(MipsIrContext& c, uint32_t r, cerfir::Ref lo) {
     if (r == 0u) return;
-    c.b->SetSlotSext(MipsGprLoDisp(r), lo);
+    MipsIrSetSext(c, MipsGprLoDisp(r), lo);
 }
 
 CERFENGINE_FORCEINLINE void MipsIrWriteSextConst(MipsIrContext& c, uint32_t r, uint32_t value) {
     if (r == 0u) return;
-    c.b->SetSlotSextConst(MipsGprLoDisp(r), value);
+    if (c.wide_gprs) c.b->SetSlotSextConst(MipsGprLoDisp(r), value);
+    else             c.b->SetSlotConst(MipsGprLoDisp(r), value);
 }
 
 CERFENGINE_FORCEINLINE void MipsIrWriteZext(MipsIrContext& c, uint32_t r, cerfir::Ref lo) {
     if (r == 0u) return;
     c.b->SetSlot(MipsGprLoDisp(r), lo);
-    c.b->SetSlotConst(MipsGprHiDisp(r), 0u);
+    if (c.wide_gprs) c.b->SetSlotConst(MipsGprHiDisp(r), 0u);
 }
 
 CERFENGINE_FORCEINLINE void MipsIrWrite64(MipsIrContext& c, uint32_t r, cerfir::Ref lo,
                                           cerfir::Ref hi) {
     if (r == 0u) return;
+    if (!c.wide_gprs) {
+        c.b->SetSlot(MipsGprLoDisp(r), lo);
+        return;
+    }
     if (cerfir::IsSlotRef(hi) && static_cast<uint32_t>(cerfir::SlotRefDisp(hi)) == MipsGprLoDisp(r)) {
         hi = c.b->Snapshot(hi);
     }
@@ -123,14 +145,15 @@ CERFENGINE_FORCEINLINE void MipsIrCopy64(MipsIrContext& c, uint32_t r, uint32_t 
     if (r == 0u || r == src) return;
     if (src == 0u) {
         c.b->SetSlotConst(MipsGprLoDisp(r), 0u);
-        c.b->SetSlotConst(MipsGprHiDisp(r), 0u);
+        if (c.wide_gprs) c.b->SetSlotConst(MipsGprHiDisp(r), 0u);
         return;
     }
-    c.b->SlotCopy64(MipsGprLoDisp(r), MipsGprLoDisp(src));
+    if (c.wide_gprs) c.b->SlotCopy64(MipsGprLoDisp(r), MipsGprLoDisp(src));
+    else             c.b->SlotCopy32(MipsGprLoDisp(r), MipsGprLoDisp(src), false);
 }
 
 CERFENGINE_FORCEINLINE void MipsIrWriteHiLo(MipsIrContext& c, uint32_t disp, cerfir::Ref lo) {
-    c.b->SetSlotSext(disp, lo);
+    MipsIrSetSext(c, disp, lo);
 }
 
 CERFENGINE_FORCEINLINE cerfir::CallSpec MipsIrCallSpec(MipsIrContext& c, const void* fn,

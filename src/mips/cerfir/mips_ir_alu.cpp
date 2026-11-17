@@ -10,9 +10,9 @@ using cerfir::Type;
 
 void CopySext(MipsIrContext& c, uint32_t dest, Ref src) {
     if (cerfir::IsSlotRef(src)) {
-        c.b->SlotCopy32(MipsGprLoDisp(dest), static_cast<uint32_t>(cerfir::SlotRefDisp(src)), true);
+        c.b->SlotCopy32(MipsGprLoDisp(dest), static_cast<uint32_t>(cerfir::SlotRefDisp(src)), c.wide_gprs);
     } else {
-        c.b->SetSlotSext(MipsGprLoDisp(dest), src);
+        MipsIrSetSext(c, MipsGprLoDisp(dest), src);
     }
 }
 
@@ -27,10 +27,10 @@ void Arith32(MipsIrContext& c, Op op, uint32_t dest, Ref b) {
         return;
     }
     if (c.d->rs == 0u) {
-        c.b->ComputeIntoSext(op, c.b->Const32(0u), b, MipsGprLoDisp(dest));
+        MipsIrComputeSext(c, op, c.b->Const32(0u), b, MipsGprLoDisp(dest));
         return;
     }
-    c.b->ComputeSlotInto<true>(op, MipsGprLoDisp(c.d->rs), b, 0u, MipsGprLoDisp(dest));
+    MipsIrComputeSlotSext(c, op, MipsGprLoDisp(c.d->rs), b, MipsGprLoDisp(dest));
 }
 
 void Copy64(MipsIrContext& c, uint32_t dest, uint32_t src) {
@@ -48,11 +48,12 @@ void Bitwise64(MipsIrContext& c, Op op) {
     cerfir::Builder& b = *c.b;
     if (d.rs != 0u && d.rt != 0u) {
         b.SlotSlotInto(op, MipsGprLoDisp(d.rs), MipsGprLoDisp(d.rt), MipsGprLoDisp(d.rd), false);
-        b.SlotSlotInto(op, MipsGprHiDisp(d.rs), MipsGprHiDisp(d.rt), MipsGprHiDisp(d.rd), false);
+        if (c.wide_gprs) b.SlotSlotInto(op, MipsGprHiDisp(d.rs), MipsGprHiDisp(d.rt), MipsGprHiDisp(d.rd), false);
         return;
     }
     b.ComputeInto(op, MipsIrReadLo(c, d.rs), MipsIrReadLo(c, d.rt), cerfir::kNoRef, 0u,
                   MipsGprLoDisp(d.rd));
+    if (!c.wide_gprs) return;
     b.ComputeInto(op, MipsIrReadHi(c, d.rs), MipsIrReadHi(c, d.rt), cerfir::kNoRef, 0u,
                   MipsGprHiDisp(d.rd));
 }
@@ -63,7 +64,7 @@ void ArithReg32(MipsIrContext& c, Op op) {
         Arith32(c, op, d.rd, MipsIrReadLo(c, d.rt));
         return;
     }
-    c.b->SlotSlotInto(op, MipsGprLoDisp(d.rs), MipsGprLoDisp(d.rt), MipsGprLoDisp(d.rd), true);
+    c.b->SlotSlotInto(op, MipsGprLoDisp(d.rs), MipsGprLoDisp(d.rt), MipsGprLoDisp(d.rd), c.wide_gprs);
 }
 
 void Immediate64(MipsIrContext& c, Op op, bool keep_hi) {
@@ -76,10 +77,11 @@ void Immediate64(MipsIrContext& c, Op op, bool keep_hi) {
     }
     if (d.rs == 0u) {
         b.SetSlotConst(MipsGprLoDisp(d.rt), op == Op::kAnd ? 0u : d.imm);
-        b.SetSlotConst(MipsGprHiDisp(d.rt), 0u);
+        if (c.wide_gprs) b.SetSlotConst(MipsGprHiDisp(d.rt), 0u);
         return;
     }
     b.SlotImmInto(op, MipsGprLoDisp(d.rs), d.imm, MipsGprLoDisp(d.rt), false);
+    if (!c.wide_gprs) return;
     if (!keep_hi) {
         b.SetSlotConst(MipsGprHiDisp(d.rt), 0u);
     } else if (d.rt != d.rs) {
@@ -122,7 +124,7 @@ void MipsIrAddiu(MipsIrContext& c) {
         Arith32(c, Op::kAdd, d.rt, c.b->Const32(MipsSignedImm(d)));
         return;
     }
-    c.b->SlotImmInto(Op::kAdd, MipsGprLoDisp(d.rs), MipsSignedImm(d), MipsGprLoDisp(d.rt), true);
+    c.b->SlotImmInto(Op::kAdd, MipsGprLoDisp(d.rs), MipsSignedImm(d), MipsGprLoDisp(d.rt), c.wide_gprs);
 }
 
 void MipsIrLui(MipsIrContext& c) {
@@ -142,6 +144,10 @@ void MipsIrNor(MipsIrContext& c) {
     if (d.rd == 0u) return;
     cerfir::Builder& b  = *c.b;
     const Ref lo = b.Op1(Op::kNot, b.Op2(Op::kOr, MipsIrReadLo(c, d.rs), MipsIrReadLo(c, d.rt)));
+    if (!c.wide_gprs) {
+        b.SetSlot(MipsGprLoDisp(d.rd), lo);
+        return;
+    }
     const Ref hi = b.Op1(Op::kNot, b.Op2(Op::kOr, MipsIrReadHi(c, d.rs), MipsIrReadHi(c, d.rt)));
     MipsIrWrite64(c, d.rd, lo, hi);
 }

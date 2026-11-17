@@ -38,13 +38,14 @@ void WideHelper(MipsIrContext& c, const void* helper) {
 void MoveFrom(MipsIrContext& c, uint32_t disp) {
     const uint32_t rd = c.d->rd;
     if (rd == 0u) return;
-    c.b->SlotCopy64(MipsGprLoDisp(rd), disp);
+    if (c.wide_gprs) c.b->SlotCopy64(MipsGprLoDisp(rd), disp);
+    else             c.b->SlotCopy32(MipsGprLoDisp(rd), disp, false);
 }
 
 void MoveTo(MipsIrContext& c, uint32_t disp) {
     const uint32_t rs = c.d->rs;
     c.b->SetSlot(disp, MipsIrReadLo(c, rs));
-    c.b->SetSlot(disp + 4u, MipsIrReadHi(c, rs));
+    if (c.wide_gprs) c.b->SetSlot(disp + 4u, MipsIrReadHi(c, rs));
 }
 
 }

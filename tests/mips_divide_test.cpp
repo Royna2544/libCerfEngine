@@ -26,7 +26,7 @@ struct Case {
     uint64_t    hi;
 };
 
-void RunCase(MipsIrRig& rig, const Case& k, const char* mode) {
+void RunCase(MipsIrRig& rig, const Case& k, const char* mode, bool wide) {
     rig.Load(kMipsRigVaBase, {RType(k.rs, k.rt, k.funct), JumpTo(kMipsRigEndVa), kNop});
     cerfengine::MipsCpuState init{};
     init.pc     = kMipsRigVaBase;
@@ -41,7 +41,9 @@ void RunCase(MipsIrRig& rig, const Case& k, const char* mode) {
         }
     }
     const cerfengine::MipsCpuState& s = rig.State();
-    if (!rig.Finished() || rig.Events().exceptions != 0u || s.lo != k.lo || s.hi != k.hi) {
+    const uint64_t mask = wide ? ~0ull : 0xFFFFFFFFull;
+    if (!rig.Finished() || rig.Events().exceptions != 0u || (s.lo & mask) != (k.lo & mask) ||
+        (s.hi & mask) != (k.hi & mask)) {
         TestFail("%s %s: lo %016llX hi %016llX, expected lo %016llX hi %016llX", mode, k.name,
                  static_cast<unsigned long long>(s.lo), static_cast<unsigned long long>(s.hi),
                  static_cast<unsigned long long>(k.lo), static_cast<unsigned long long>(k.hi));
@@ -52,7 +54,8 @@ void RunCore(const cerfengine::MipsFeatures& features, uint32_t page_shift, bool
              const std::vector<Case>& cases, const char* mode) {
     MipsIrRig rig(features, page_shift, verify);
     rig.Load(kMipsRigEndVa, {0x1000FFFFu, 0u, 0u, 0u, 0x650017FFu});
-    for (const Case& k : cases) RunCase(rig, k, mode);
+    const bool wide = cerfengine::MipsHas64BitGprs(features.isa_level);
+    for (const Case& k : cases) RunCase(rig, k, mode, wide);
 }
 
 }

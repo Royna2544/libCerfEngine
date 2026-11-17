@@ -45,7 +45,7 @@ void Trapping32(MipsIrContext& c, Op op, uint32_t dest, bool imm) {
     RaiseOverflow(c);
     b.Label(ok);
     if (dest == 0u) return;
-    b.ComputeIntoSext(op, MipsIrReadLo(c, d.rs), Rhs32(c, imm), MipsGprLoDisp(dest));
+    MipsIrComputeSext(c, op, MipsIrReadLo(c, d.rs), Rhs32(c, imm), MipsGprLoDisp(dest));
 }
 
 Ref Rhs64(MipsIrContext& c, bool imm) {

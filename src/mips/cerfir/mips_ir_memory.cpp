@@ -36,7 +36,7 @@ void LoadInto(MipsIrContext& c, uint8_t width, bool sign, Ref address) {
     cerfir::MemAttr&       m     = Attr(c, width, sign, &index);
     if (d.rt != 0u) {
         m.result_slot  = static_cast<int32_t>(MipsGprLoDisp(d.rt));
-        m.result_slot2 = static_cast<int32_t>(MipsGprHiDisp(d.rt));
+        if (c.wide_gprs) m.result_slot2 = static_cast<int32_t>(MipsGprHiDisp(d.rt));
     }
     Ref value = kNoRef;
     if (address != kNoRef) {

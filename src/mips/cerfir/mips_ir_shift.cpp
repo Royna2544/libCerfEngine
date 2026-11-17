@@ -15,20 +15,20 @@ void ShiftImm32(MipsIrContext& c, Op op) {
     const MipsDecodedInsn& d = *c.d;
     if (d.rd == 0u) return;
     if (d.sa == 0u) {
-        c.b->SetSlotSext(MipsGprLoDisp(d.rd), MipsIrReadLo(c, d.rt));
+        MipsIrSetSext(c, MipsGprLoDisp(d.rd), MipsIrReadLo(c, d.rt));
         return;
     }
     if (d.rt != 0u) {
-        c.b->SlotImmInto(op, MipsGprLoDisp(d.rt), d.sa, MipsGprLoDisp(d.rd), true);
+        c.b->SlotImmInto(op, MipsGprLoDisp(d.rt), d.sa, MipsGprLoDisp(d.rd), c.wide_gprs);
         return;
     }
-    c.b->ComputeIntoSext(op, MipsIrReadLo(c, d.rt), c.b->Const32(d.sa), MipsGprLoDisp(d.rd));
+    MipsIrComputeSext(c, op, MipsIrReadLo(c, d.rt), c.b->Const32(d.sa), MipsGprLoDisp(d.rd));
 }
 
 void ShiftVar32(MipsIrContext& c, Op op) {
     const MipsDecodedInsn& d = *c.d;
     if (d.rd == 0u) return;
-    c.b->ComputeIntoSext(op, MipsIrReadLo(c, d.rt), MipsIrReadLo(c, d.rs), MipsGprLoDisp(d.rd));
+    MipsIrComputeSext(c, op, MipsIrReadLo(c, d.rt), MipsIrReadLo(c, d.rs), MipsGprLoDisp(d.rd));
 }
 
 void ShiftImm64(MipsIrContext& c, Op op) {

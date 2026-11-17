@@ -100,10 +100,11 @@ void Run(LegacySystem& system, cerfengine::MipsIsaLevel isa, bool verify,
     }
     TEST_CHECK(state.pc == kExit);
     if (check_banks) {
-        TEST_CHECK(state.gpr[2] == 0xFFFFFFFFA5A55A5Aull);
-        TEST_CHECK(state.gpr[3] == 4u);
-        TEST_CHECK(state.gpr[4] == 0xFFFFFFFF80000003ull);
-        TEST_CHECK(state.gpr[5] == 0u);
+        const uint64_t mask = cerfengine::MipsHas64BitGprs(isa) ? ~0ull : 0xFFFFFFFFull;
+        TEST_CHECK((state.gpr[2] & mask) == (0xFFFFFFFFA5A55A5Aull & mask));
+        TEST_CHECK((state.gpr[3] & mask) == 4u);
+        TEST_CHECK((state.gpr[4] & mask) == (0xFFFFFFFF80000003ull & mask));
+        TEST_CHECK((state.gpr[5] & mask) == 0u);
     }
 }
 
