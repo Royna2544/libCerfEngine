@@ -9,6 +9,7 @@ function(cerfengine_test name)
 endfunction()
 
 cerfengine_test(api_test)
+cerfengine_test(isa_block_space_test)
 if(cerfengine_translator)
     cerfengine_test(cerfir_test)
     target_include_directories(cerfir_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")

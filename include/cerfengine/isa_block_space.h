@@ -75,6 +75,10 @@ struct IsaBlockSpace {
     uint32_t               page_base  = 0;
     uint32_t               page_count = 0;
 
+    uint16_t jump_cache_filled[kJumpCacheSize];
+    uint32_t jump_cache_filled_bits[kJumpCacheSize / 32u]{};
+    uint32_t jump_cache_filled_count = kJumpCacheSize;
+
     static uint32_t JumpCacheIndex(uint32_t folded_va) {
         return (folded_va >> 2) & (kJumpCacheSize - 1u);
     }
@@ -94,18 +98,20 @@ struct IsaBlockSpace {
     }
 
     void JumpCacheFlush() {
-        std::memset(jump_cache, 0, sizeof(jump_cache));
-        std::memset(jump_cache_blk, 0, sizeof(jump_cache_blk));
+        if (jump_cache_filled_count >= kJumpCacheSize / 8u) {
+            std::memset(jump_cache, 0, sizeof(jump_cache));
+            std::memset(jump_cache_blk, 0, sizeof(jump_cache_blk));
+        } else {
+            for (uint32_t i = 0; i < jump_cache_filled_count; ++i) {
+                JumpCacheClearEntry(jump_cache_filled[i]);
+            }
+        }
+        std::memset(jump_cache_filled_bits, 0, sizeof(jump_cache_filled_bits));
+        jump_cache_filled_count = 0;
     }
 
     void JumpCacheClearPage(uint32_t page_va) {
-        const uint32_t base = page_va & 0xFFFFF000u;
-        for (uint32_t off = 0; off < 0x1000u; off += 4u) {
-            const uint32_t index = JumpCacheIndex(base + off);
-            if ((JumpCacheLiveKey(jump_cache[index]) & 0xFFFFF000u) == base) {
-                JumpCacheClearEntry(index);
-            }
-        }
+        JumpCacheClearRange(page_va & 0xFFFFF000u, 0x1000u);
     }
 
     void JumpCacheClearRange(uint32_t base_va, uint32_t span_bytes);
@@ -134,6 +140,12 @@ struct IsaBlockSpace {
         e.key[privilege]      = folded_va;
         e.native              = native;
         jump_cache_blk[index] = blk;
+        uint32_t& word        = jump_cache_filled_bits[index / 32u];
+        const uint32_t bit    = 1u << (index & 31u);
+        if ((word & bit) == 0u) {
+            word |= bit;
+            jump_cache_filled[jump_cache_filled_count++] = static_cast<uint16_t>(index);
+        }
     }
 
     void Initialize(cerfengine::Engine& engine, uint32_t dram_page_base,
