@@ -37,7 +37,7 @@ void ArmIrCodegen::OnReady() {
 void ArmIrCodegen::BuildGuestModel() {
     ArmMmu& mmu       = engine_.Get<ArmMmu>();
     model_.cycle_slot = static_cast<int32_t>(offsetof(ArmCpuState, guest_cycle_counter));
-    model_.pinned     = cerfir::PinnedSlots{ArmGprDisp(0), 16u};
+    model_.pinned     = cerfir::PinnedSlots::Contiguous(ArmGprDisp(0), 16u);
 
     cerfir::ExitModel& e = model_.exits;
     e.chain              = true;

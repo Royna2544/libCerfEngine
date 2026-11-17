@@ -147,6 +147,15 @@ CERFENGINE_FORCEINLINE uint8_t BranchDelaySlotClass(const MipsDecodedInsn& slot)
 
 }
 
+cerfir::PinnedSlots MipsIrCodegen::NarrowPinnedSlots() {
+    constexpr uint32_t kHotGprs[] = {2u, 4u, 5u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 17u, 19u, 29u, 31u};
+    cerfir::PinnedSlots pinned;
+    pinned.disp[pinned.count++] = static_cast<int32_t>(offsetof(MipsCpuState, guest_cycle_counter));
+    pinned.disp[pinned.count++] = static_cast<int32_t>(offsetof(MipsCpuState, guest_cycle_deadline));
+    for (uint32_t r : kHotGprs) pinned.disp[pinned.count++] = static_cast<int32_t>(MipsGprLoDisp(r));
+    return pinned;
+}
+
 void MipsIrCodegen::OnReady() {
     host_                      = &engine_.Host();
     verify_                    = engine_.GetSetup().verify_ir;
@@ -160,6 +169,7 @@ void MipsIrCodegen::OnReady() {
     e.deadline_slot   = static_cast<int32_t>(offsetof(MipsCpuState, guest_cycle_deadline));
     e.mode_slot       = static_cast<int32_t>(MipsIsaModeDisp());
     e.mode_mask       = engine_.GetSetup().mips.mips16 ? 1u : 0u;
+    if (!wide_gprs_) model_.pinned = NarrowPinnedSlots();
     model_.memory = cerfir::MemoryModelKind::kSoftTlb;
     engine_.Get<MipsSoftTlb>().DescribeModel(model_.tlb);
     model_.slow = engine_.Get<MipsIrMemorySlowPath>().SlowModel();

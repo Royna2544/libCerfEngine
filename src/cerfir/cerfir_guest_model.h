@@ -114,9 +114,18 @@ struct MemorySlowModel {
 
 enum class MemoryModelKind : uint8_t { kNone, kSoftTlb, kHelper };
 
+constexpr uint32_t kMaxPinnedSlots = 16;
+
 struct PinnedSlots {
-    int32_t  base  = 0;
-    uint32_t count = 0;
+    int32_t  disp[kMaxPinnedSlots] = {};
+    uint32_t count                 = 0;
+
+    static constexpr PinnedSlots Contiguous(int32_t base, uint32_t count) {
+        PinnedSlots p;
+        for (uint32_t i = 0; i < count && i < kMaxPinnedSlots; ++i) p.disp[i] = base + static_cast<int32_t>(i * 4u);
+        p.count = count;
+        return p;
+    }
 };
 
 struct GuestModel {

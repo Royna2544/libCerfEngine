@@ -39,6 +39,8 @@ public:
     const void* EntryStub() const { return target_.entry_stub; }
 
 private:
+    static cerfir::PinnedSlots NarrowPinnedSlots();
+
     void TranslateBlock(const MipsIrBlockInput& in);
     template <bool kTraced, bool kCop0Checked>
     void TranslateInsns(const MipsIrBlockInput& in, MipsIrContext& c);

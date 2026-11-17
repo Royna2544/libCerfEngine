@@ -11,7 +11,7 @@
 
 namespace cerfengine::cerfir {
 
-inline constexpr uint32_t kA64MaxPinned = 16;
+inline constexpr uint32_t kA64MaxPinned = kMaxPinnedSlots;
 
 inline constexpr uint8_t kA64PinnedRegs[kA64MaxPinned] = {
     a64::kX19, a64::kX20, a64::kX21, a64::kX22, a64::kX23, a64::kX24, a64::kX25, a64::kX26,
@@ -39,14 +39,22 @@ public:
     CERFENGINE_FORCEINLINE A64PinState State() const { return state_; }
 
     CERFENGINE_FORCEINLINE int32_t Index(int32_t disp, uint32_t bytes) const {
-        const int64_t off = int64_t{disp} - base_;
-        if (off >= span_ || off + int64_t{bytes} <= 0) return -1;
-        if (bytes != 4u || (off & 3) != 0) WidthFault(disp, bytes);
-        return static_cast<int32_t>(off >> 2);
+        const int64_t end = int64_t{disp} + bytes;
+        if (end <= low_ || disp >= high_) return -1;
+        for (uint32_t i = 0; i < count_; ++i) {
+            const int32_t slot = slots_[i];
+            if (end <= slot || disp >= int64_t{slot} + 4) continue;
+            if (disp != slot || bytes != 4u) WidthFault(disp, bytes);
+            return static_cast<int32_t>(i);
+        }
+        return -1;
     }
     CERFENGINE_FORCEINLINE void CheckUnpinned(int32_t disp, uint32_t bytes) const {
-        const int64_t off = int64_t{disp} - base_;
-        if (off < span_ && off + int64_t{bytes} > 0) WidthFault(disp, bytes);
+        const int64_t end = int64_t{disp} + bytes;
+        if (end <= low_ || disp >= high_) return;
+        for (uint32_t i = 0; i < count_; ++i) {
+            if (end > slots_[i] && disp < int64_t{slots_[i]} + 4) WidthFault(disp, bytes);
+        }
     }
 
     CERFENGINE_FORCEINLINE void Load(uint8_t*& c, uint8_t reg, int32_t disp) {
@@ -129,7 +137,7 @@ private:
     CERFENGINE_FORCEINLINE uint8_t Fresh(uint8_t*& c, uint32_t i) {
         const uint32_t bit = 1u << i;
         if ((state_.stale & bit) != 0u) {
-            a64::EmitLdrW(c, kA64PinnedRegs[i], a64::kStateReg, base_ + static_cast<int32_t>(i * 4u));
+            a64::EmitLdrW(c, kA64PinnedRegs[i], a64::kStateReg, slots_[i]);
             state_.stale &= ~bit;
         }
         return kA64PinnedRegs[i];
@@ -150,8 +158,9 @@ private:
     [[noreturn]] static void WidthFault(int32_t disp, uint32_t bytes);
     [[noreturn]] static void ParkedStoreFault();
 
-    int32_t             base_      = 0;
-    int64_t             span_      = 0;
+    int32_t             slots_[kA64MaxPinned] = {};
+    int64_t             low_       = 0;
+    int64_t             high_      = 0;
     uint32_t            count_     = 0;
     uint32_t            full_      = 0;
     uint32_t            caller_    = 0;

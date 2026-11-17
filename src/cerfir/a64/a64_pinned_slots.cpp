@@ -1,5 +1,7 @@
 #include "a64_pinned_slots.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 
 #include "../../emit_fault.h"
@@ -10,9 +12,19 @@ void A64PinnedSlots::Reset(const PinnedSlots& model) {
     if (model.count > kA64MaxPinned) {
         throw EmitFault("CerfIR A64 lowering: the guest pins more slots than the host has pinned registers");
     }
-    base_      = model.base;
     count_     = model.count;
-    span_      = int64_t{count_} * 4;
+    low_       = INT64_MAX;
+    high_      = INT64_MIN;
+    for (uint32_t i = 0; i < count_; ++i) {
+        slots_[i] = model.disp[i];
+        low_      = std::min<int64_t>(low_, slots_[i]);
+        high_     = std::max<int64_t>(high_, int64_t{slots_[i]} + 4);
+        for (uint32_t j = 0; j < i; ++j) {
+            if (slots_[j] < slots_[i] + 4 && slots_[i] < slots_[j] + 4) {
+                throw EmitFault("CerfIR A64 lowering: two pinned slots overlap");
+            }
+        }
+    }
     full_      = count_ == 0u ? 0u : (0xFFFFFFFFu >> (32u - count_));
     host_mask_ = A64PinnedHostMask(count_);
     caller_    = 0u;
@@ -29,12 +41,13 @@ void A64PinnedSlots::Reset(const PinnedSlots& model) {
 void A64PinnedSlots::EmitStores(uint8_t*& c, uint32_t mask) const {
     for (uint32_t i = 0; i < count_;) {
         const uint32_t bit  = 1u << i;
-        const int32_t  disp = base_ + static_cast<int32_t>(i * 4u);
+        const int32_t  disp = slots_[i];
         if ((mask & bit) == 0u) {
             ++i;
             continue;
         }
-        if (i + 1u < count_ && (mask & (bit << 1)) != 0u && a64::PairWOffsetFits(disp)) {
+        if (i + 1u < count_ && (mask & (bit << 1)) != 0u && slots_[i + 1u] == disp + 4 &&
+            a64::PairWOffsetFits(disp)) {
             a64::EmitStpWOffset(c, kA64PinnedRegs[i], kA64PinnedRegs[i + 1u], a64::kStateReg, disp);
             i += 2u;
             continue;
@@ -47,12 +60,13 @@ void A64PinnedSlots::EmitStores(uint8_t*& c, uint32_t mask) const {
 void A64PinnedSlots::EmitLoads(uint8_t*& c, uint32_t mask) const {
     for (uint32_t i = 0; i < count_;) {
         const uint32_t bit  = 1u << i;
-        const int32_t  disp = base_ + static_cast<int32_t>(i * 4u);
+        const int32_t  disp = slots_[i];
         if ((mask & bit) == 0u) {
             ++i;
             continue;
         }
-        if (i + 1u < count_ && (mask & (bit << 1)) != 0u && a64::PairWOffsetFits(disp)) {
+        if (i + 1u < count_ && (mask & (bit << 1)) != 0u && slots_[i + 1u] == disp + 4 &&
+            a64::PairWOffsetFits(disp)) {
             a64::EmitLdpWOffset(c, kA64PinnedRegs[i], kA64PinnedRegs[i + 1u], a64::kStateReg, disp);
             i += 2u;
             continue;

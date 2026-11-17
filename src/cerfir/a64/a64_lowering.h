@@ -48,7 +48,7 @@ class A64Lowering {
 public:
     static constexpr ptrdiff_t kOpReserveBytes = 4096;
     static constexpr uint32_t  kCycleAddLimit  = 0x1000u;
-    static constexpr size_t    kEntryStubBytes = 64;
+    static constexpr size_t    kEntryStubBytes = 128;
 
     A64Lowering() : regs_(cursor_, pins_) {}
 
