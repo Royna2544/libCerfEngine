@@ -40,6 +40,11 @@ void PhysicalMap::Invalidate() {
     for (std::unique_ptr<PhysicalPage[]>& table : tables_) {
         if (table) std::fill_n(table.get(), kPagesPerTable, PhysicalPage{});
     }
+    for (const ListenerEntry& entry : listeners_) entry.listener(entry.context);
+}
+
+void PhysicalMap::AddInvalidateListener(InvalidateListener listener, void* context) {
+    listeners_.push_back(ListenerEntry{listener, context});
 }
 
 }

@@ -13,6 +13,8 @@
 #include <cerfengine/mips/mips_mmu.h>
 #include <cerfengine/physical_map.h>
 #include "mips_translation_cache.h"
+#include "cerfir/mips_ir_codegen.h"
+#include "mips_soft_tlb.h"
 
 namespace cerfengine {
 
@@ -31,6 +33,8 @@ void MipsJit::OnReady() {
     map_           = &engine_.Get<PhysicalMap>();
     host_          = &engine_.Host();
     block_entry_   = &engine_.Get<GuardedBlockEntry>();
+    soft_tlb_      = &engine_.Get<MipsSoftTlb>();
+    entry_stub_    = engine_.Get<MipsIrCodegen>().EntryStub();
 }
 
 bool MipsJit::GuestIrqMasked() const {
@@ -112,7 +116,7 @@ dispatch:
 #if CERFENGINE_BACKEND_X86_WIN32
     {
         __try {
-            cerfir::HostEnterBlock(native, cpu_state_);
+            cerfir::HostEnterBlock(native, cpu_state_, soft_tlb_->State(), entry_stub_);
         } __except (platform::FilterDispatchException(_exception_info())) {
             const platform::HostFault& fault = platform::LastDispatchFault();
             if (fault.code == platform::kHaltUnwindCode) return RunStatus::kHalted;
@@ -123,7 +127,8 @@ dispatch:
     }
     return RunStatus::kRunning;
 #elif CERFENGINE_GUARDED_DISPATCH
-    auto                enter = [&] { cerfir::HostEnterBlock(native, cpu_state_); };
+    MipsSoftTlbState* const soft_state = soft_tlb_->State();
+    auto enter = [&] { cerfir::HostEnterBlock(native, cpu_state_, soft_state, entry_stub_); };
     platform::HostFault fault{};
     switch (block_entry_->Enter(enter, pc, fault)) {
     case BlockExit::kReturned:
@@ -146,6 +151,7 @@ void MipsJit::DeliverReset() {
     cpu_->ResetState();
     cache_->ContextSwitchFlush();
     mmu_->ArmErlMap();
+    soft_tlb_->FlushAll();
 }
 
 void MipsJit::SetExternalInterruptLevel(uint32_t ip_mask) {
@@ -155,6 +161,7 @@ void MipsJit::SetExternalInterruptLevel(uint32_t ip_mask) {
 void MipsJit::SetFixedWindow(uint32_t va, uint32_t pa, uint32_t size) {
     mmu_->SetFixedWindow(va, pa, size);
     cache_->SetFixedWindowHost(pa, size);
+    soft_tlb_->FlushAll();
 }
 
 void MipsJit::PrepareStateSave() {
@@ -165,6 +172,7 @@ void MipsJit::OnStateRestored() {
     channel_->SetResetRequest(cpu_state_->reset_pending != 0u);
     channel_->OnCpuStateRestored();
     mmu_->ArmErlMap();
+    soft_tlb_->FlushAll();
 }
 
 void MipsJit::SetResetPending(bool is_resume) {
@@ -193,6 +201,7 @@ void MipsJit::FlushTranslationCache() { cache_->Flush(); }
 
 void MipsJit::SetDmaRegion(uint32_t pa, uint32_t size) {
     cache_->AddDmaRegion(pa, size);
+    soft_tlb_->FlushAll();
 }
 
 std::optional<uint8_t*> MipsJit::PeekGuestVa(uint32_t va) {

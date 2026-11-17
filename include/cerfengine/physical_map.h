@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "engine.h"
 #include "physical_memory_host.h"
@@ -37,7 +38,15 @@ public:
 
     void Invalidate();
 
+    using InvalidateListener = void (*)(void* context);
+    void AddInvalidateListener(InvalidateListener listener, void* context);
+
 private:
+    struct ListenerEntry {
+        InvalidateListener listener;
+        void*              context;
+    };
+
     static constexpr uint32_t kPageShift      = 12u;
     static constexpr uint32_t kTableShift     = 22u;
     static constexpr uint32_t kTableCount     = 1u << (32u - kTableShift);
@@ -49,6 +58,7 @@ private:
 
     void*                           host_ = nullptr;
     std::unique_ptr<PhysicalPage[]> tables_[kTableCount];
+    std::vector<ListenerEntry>      listeners_;
 };
 
 }

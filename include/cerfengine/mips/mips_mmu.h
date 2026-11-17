@@ -34,8 +34,10 @@ public:
     }
 
     void Bind(IsaBlockSpace* blocks32, IsaBlockSpace* blocks16) {
-        context_.Bind(state_, blocks32, blocks16);
+        context_.Bind(state_, blocks32, blocks16, &soft_tlb_);
     }
+
+    MipsSoftTlbState* SoftTlb() { return &soft_tlb_; }
 
     /* VR4121 UM §6.2.5 Table 6-1 (p.162), §6.2.6 Table 6-2 (p.164); TMPR39xx-um §5.1
        (p.43): User mode reaches only 0x00000000-0x7FFFFFFF, Supervisor mode adds
@@ -84,9 +86,13 @@ public:
         fixed_window_va_   = va;
         fixed_window_pa_   = pa;
         fixed_window_size_ = size;
+        MipsSoftTlbFlushAll(&soft_tlb_);
     }
 
     cerfengine::MipsTlbContext& TlbContext() { return context_; }
+
+    bool PageTranslationUniform(uint32_t privilege, const MipsCpuState* st, uint32_t va,
+                                bool* mapped) const;
 
     uint32_t ErlMask() const { return erl_mask_; }
 
@@ -111,6 +117,7 @@ private:
     MipsCpuState*              state_ = nullptr;
     uint32_t                   erl_mask_ = 0;
     cerfengine::MipsTlbContext context_;
+    MipsSoftTlbState           soft_tlb_{};
     uint32_t fixed_window_va_   = 0;
     uint32_t fixed_window_pa_   = 0;
     uint32_t fixed_window_size_ = 0;

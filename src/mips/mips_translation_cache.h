@@ -32,6 +32,10 @@ public:
 
     void InvalidateOnRamWrite(uint8_t* host, uint32_t size);
 
+    bool PageStoresSkipInvalidation(const uint8_t* host_page) const;
+
+    bool PageHasBlocks(const uint8_t* host_page) const;
+
     uint32_t BlockIndexKey(uint32_t phys_start);
 
     void SetFixedWindowHost(uint32_t pa, uint32_t size);

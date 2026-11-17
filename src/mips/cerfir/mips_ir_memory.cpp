@@ -21,6 +21,7 @@ cerfir::MemAttr& Attr(MipsIrContext& c, uint8_t width, bool sign, uint32_t* inde
     cerfir::MemAttr&       m = c.b->NewMemAttr(index);
     m.width_bytes            = width;
     m.sign                   = sign;
+    m.slow_mask              = width - 1u;
     m.guest_pc               = d.guest_address;
     if (d.rs != 0u) {
         m.base_slot = static_cast<int32_t>(MipsGprLoDisp(d.rs));
@@ -31,12 +32,6 @@ cerfir::MemAttr& Attr(MipsIrContext& c, uint8_t width, bool sign, uint32_t* inde
 
 void LoadInto(MipsIrContext& c, uint8_t width, bool sign, Ref address) {
     const MipsDecodedInsn& d = *c.d;
-    if (address == kNoRef && d.rs != 0u && d.rt != 0u &&
-        c.b->SimpleLoad(width, sign, MipsGprLoDisp(d.rs), MipsSignedImm(d), MipsGprLoDisp(d.rt),
-                        MipsGprHiDisp(d.rt), d.guest_address)) {
-        c.pc_stored = true;
-        return;
-    }
     uint32_t index = 0;
     cerfir::MemAttr&       m     = Attr(c, width, sign, &index);
     if (d.rt != 0u) {
@@ -54,16 +49,10 @@ void LoadInto(MipsIrContext& c, uint8_t width, bool sign, Ref address) {
         value = c.b->LoadBased(Type::kI32, index, m);
     }
     if (d.rt == 0u) c.b->Drop(value);
-    c.pc_stored = true;
 }
 
 void StoreFrom(MipsIrContext& c, uint8_t width) {
     const MipsDecodedInsn& d = *c.d;
-    if (d.rs != 0u && c.b->SimpleStore(width, MipsGprLoDisp(d.rs), MipsSignedImm(d),
-                                       MipsIrReadLo(c, d.rt), d.guest_address)) {
-        c.pc_stored = true;
-        return;
-    }
     uint32_t index = 0;
     const cerfir::MemAttr& m     = Attr(c, width, false, &index);
     const Ref              value = MipsIrReadLo(c, d.rt);
@@ -72,7 +61,6 @@ void StoreFrom(MipsIrContext& c, uint8_t width) {
     } else {
         c.b->StoreBased(value, index, m);
     }
-    c.pc_stored = true;
 }
 
 const MipsMemoryHelpers& Helpers(const MipsIrContext& c) {

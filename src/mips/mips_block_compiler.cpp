@@ -13,7 +13,9 @@
 #include <cerfengine/mips/mips_exception_delivery.h>
 #include "mips_insn_decoder.h"
 #include <cerfengine/mips/mips_mmu.h>
+#include "mips_soft_tlb.h"
 #include "mips_translation_cache.h"
+#include <cerfengine/physical_map.h>
 #include "cerfir/mips_ir_codegen.h"
 
 namespace cerfengine {
@@ -30,6 +32,8 @@ void MipsBlockCompiler::OnReady() {
     exceptions_ = &engine_.Get<MipsExceptionDelivery>();
     ir_codegen_ = &engine_.Get<MipsIrCodegen>();
     emitter_    = &engine_.Get<JitBlockEmitter>();
+    soft_tlb_   = &engine_.Get<MipsSoftTlb>();
+    map_        = &engine_.Get<PhysicalMap>();
 
     block_ctx_.emit     = &engine_.Get<MipsEmitServices>();
     block_ctx_.compiler = this;
@@ -184,10 +188,23 @@ void* MipsBlockCompiler::EmitIrBlock(uint32_t guest_pc, uint32_t phys_start,
     target.privilege  = privilege;
     target.pending    = pending;
 
-    return emitter_->Emit(BlockEmitRequest{&cache_->Arena(), index != nullptr ? &emit_index : nullptr,
-                                           guest_pc, guest_pc, last.guest_address + last.length - 1u, phys_start,
-                                           privilege, block_ctx_.num_insns, start_ns},
-                          target);
+    const uint8_t* const first_head = index != nullptr ? FirstBlockOnPage(phys_start) : nullptr;
+    const uint8_t* const first_tail = index != nullptr && block_ctx_.tail_split != 0u
+                                          ? FirstBlockOnPage(block_ctx_.tail_page_pa)
+                                          : nullptr;
+    void* const native =
+        emitter_->Emit(BlockEmitRequest{&cache_->Arena(), index != nullptr ? &emit_index : nullptr,
+                                        guest_pc, guest_pc, last.guest_address + last.length - 1u, phys_start,
+                                        privilege, block_ctx_.num_insns, start_ns},
+                       target);
+    if (first_head != nullptr) soft_tlb_->DemoteHostPage(first_head);
+    if (first_tail != nullptr) soft_tlb_->DemoteHostPage(first_tail);
+    return native;
+}
+
+const uint8_t* MipsBlockCompiler::FirstBlockOnPage(uint32_t pa) {
+    const uint8_t* const host_page = map_->Read(pa & kMipsSoftTlbPageMask);
+    return host_page != nullptr && !cache_->PageHasBlocks(host_page) ? host_page : nullptr;
 }
 
 void MipsBlockCompiler::FillLink(const IrIndex* index, JitBlock* stored, uint32_t guest_pc,

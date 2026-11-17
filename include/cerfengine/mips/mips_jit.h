@@ -17,6 +17,7 @@ class MipsExceptionDelivery;
 class MipsInterruptChannel;
 class MipsMemoryAccess;
 class MipsMmu;
+class MipsSoftTlb;
 class MipsTranslationCache;
 class PhysicalMap;
 
@@ -75,6 +76,8 @@ private:
     PhysicalMap*            map_           = nullptr;
     cerfengine::EngineHost* host_          = nullptr;
     GuardedBlockEntry*      block_entry_   = nullptr;
+    MipsSoftTlb*            soft_tlb_      = nullptr;
+    const void*             entry_stub_    = nullptr;
 };
 
 }

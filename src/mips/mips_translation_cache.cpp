@@ -92,6 +92,19 @@ void MipsTranslationCache::InvalidateOnRamWrite(uint8_t* host, uint32_t size) {
     }
 }
 
+bool MipsTranslationCache::PageHasBlocks(const uint8_t* host_page) const {
+    const uint32_t off = dram_.PackedOffset(host_page);
+    return off != DramHostTable::kNotDram &&
+           (blocks_.PageHasBlocks(off) || blocks16_.PageHasBlocks(off));
+}
+
+bool MipsTranslationCache::PageStoresSkipInvalidation(const uint8_t* host_page) const {
+    if (dram_.PackedOffset(host_page) != DramHostTable::kNotDram) return !PageHasBlocks(host_page);
+    const uint8_t* const last = host_page + ~kMipsSoftTlbPageMask;
+    return (InFixedWindow(host_page) && InFixedWindow(last)) ||
+           (InDmaRegion(host_page) && InDmaRegion(last));
+}
+
 void MipsTranslationCache::SetFixedWindowHost(uint32_t pa, uint32_t size) {
     window_host_base_ = map_->PeekWrite(pa);
     window_size_      = window_host_base_ ? size : 0u;

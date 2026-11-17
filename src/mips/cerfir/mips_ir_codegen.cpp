@@ -10,12 +10,15 @@
 #include <cerfengine/mips/mips_exception_delivery.h>
 
 #include "../../cerfir/cerfir_builder.h"
+#include "../../cerfir/cerfir_soft_tlb_target.h"
 #include "../../cerfir/cerfir_verify.h"
 #include "../../emit_fault.h"
 #include "../mips_block_compiler.h"
 #include "../mips_emit_services.h"
-#include "../mips_memory_access.h"
+#include "../mips_soft_tlb.h"
+#include "../mips_translation_cache.h"
 #include "mips_ir_context.h"
+#include "mips_ir_memory_slow_path.h"
 #include "mips_ir_fns.h"
 
 namespace cerfengine {
@@ -157,18 +160,11 @@ void MipsIrCodegen::OnReady() {
     e.deadline_slot   = static_cast<int32_t>(offsetof(MipsCpuState, guest_cycle_deadline));
     e.mode_slot       = static_cast<int32_t>(MipsIsaModeDisp());
     e.mode_mask       = engine_.GetSetup().mips.mips16 ? 1u : 0u;
-    model_.memory              = cerfir::MemoryModelKind::kHelper;
-    cerfir::HelperMemoryModel& h = model_.helper;
-    for (uint32_t p = 0; p < kBlockPrivilegeCount; ++p) {
-        const MipsMemoryHelpers& m = MipsMemoryAccess::HelpersFor(p);
-        for (uint32_t w = 0; w < 3u; ++w) {
-            h.load[p][w]  = reinterpret_cast<const void*>(m.load[w]);
-            h.store[p][w] = reinterpret_cast<const void*>(m.store[w]);
-        }
-    }
-    h.context      = &engine_.Get<MipsMemoryAccess>();
-    h.store_pc     = true;
-    target_.model  = &model_;
+    model_.memory = cerfir::MemoryModelKind::kSoftTlb;
+    engine_.Get<MipsSoftTlb>().DescribeModel(model_.tlb);
+    model_.slow = engine_.Get<MipsIrMemorySlowPath>().SlowModel();
+    cerfir::BuildSoftTlbTarget(engine_, engine_.Get<MipsTranslationCache>().Arena(), model_, tlb_,
+                               target_, "MipsIrCodegen");
     block_.SetPcSlot(static_cast<int32_t>(MipsPcDisp()));
 }
 

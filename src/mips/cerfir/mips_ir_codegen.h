@@ -36,6 +36,8 @@ public:
 
     MipsSystemHost* System() const { return system_; }
 
+    const void* EntryStub() const { return target_.entry_stub; }
+
 private:
     void TranslateBlock(const MipsIrBlockInput& in);
     template <bool kTraced, bool kCop0Checked>
@@ -54,6 +56,7 @@ private:
     cerfir::Block           block_;
     cerfir::HostLowering    lowering_;
     cerfir::GuestModel      model_;
+    cerfir::HostSoftTlb     tlb_;
     cerfir::HostGuestTarget target_;
     EngineHost*             host_   = nullptr;
     MipsSystemHost*         system_ = nullptr;

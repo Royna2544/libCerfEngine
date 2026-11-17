@@ -18,7 +18,9 @@ class MipsExceptionDelivery;
 class MipsInsnDecoder;
 class MipsIrCodegen;
 class MipsMmu;
+class MipsSoftTlb;
 class MipsTranslationCache;
+class PhysicalMap;
 class JitBlockIndex;
 struct BlockIndexSet;
 struct IsaBlockSpace;
@@ -71,6 +73,7 @@ private:
 
     void   FillLink(const IrIndex* index, JitBlock* stored, uint32_t guest_pc,
                     uint32_t phys_start, uint8_t* code, uint32_t privilege);
+    const uint8_t* FirstBlockOnPage(uint32_t pa);
 
     MipsBlockContext  block_ctx_{};
     MipsIrCodegen*    ir_codegen_     = nullptr;
@@ -85,6 +88,8 @@ private:
     MipsInsnDecoder*       decoder_    = nullptr;
     MipsExceptionDelivery* exceptions_ = nullptr;
     JitBlockEmitter*       emitter_    = nullptr;
+    MipsSoftTlb*           soft_tlb_   = nullptr;
+    PhysicalMap*           map_        = nullptr;
 };
 
 }

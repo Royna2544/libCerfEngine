@@ -10,6 +10,7 @@ CERFENGINE_REGISTER(MipsMmu);
 void MipsMmu::OnReady() {
     tlb_   = engine_.GetSetup().mips_tlb;
     state_ = engine_.Get<MipsCpu>().State();
+    MipsSoftTlbFlushAll(&soft_tlb_);
     LeaveErlMode();
     if (engine_.GetSetup().mips.isa_level != MipsIsaLevel::kMips1) erl_mask_ = 1u << MipsStatusBit::kERL;
     ArmErlMap();
@@ -56,6 +57,28 @@ void CERFENGINE_FASTCALL MipsMmu::ErlSetHelper(MipsMmu* mmu) {
     mmu->context_.InvalidateAddressSpace();
 }
 
+bool MipsMmu::PageTranslationUniform(uint32_t privilege, const MipsCpuState* st, uint32_t va,
+                                     bool* mapped) const {
+    const uint32_t page = va & kMipsSoftTlbPageMask;
+    const uint32_t last = page + ~kMipsSoftTlbPageMask;
+    if (fixed_window_size_ != 0u) {
+        const uint32_t window_last = fixed_window_va_ + (fixed_window_size_ - 1u);
+        const bool     head_in     = page - fixed_window_va_ < fixed_window_size_;
+        const bool     tail_in     = last - fixed_window_va_ < fixed_window_size_;
+        if (head_in || tail_in || (fixed_window_va_ >= page && window_last <= last)) {
+            *mapped = false;
+            return head_in && tail_in && ((fixed_window_va_ ^ fixed_window_pa_) & ~kMipsSoftTlbPageMask) == 0u;
+        }
+    }
+    if (privilege == kBlockPrivileged && MipsSeg::IsUnmapped(va)) {
+        *mapped = false;
+        return true;
+    }
+    if ((st->cp0_status & erl_mask_) != 0u && va < MipsSeg::kKusegEnd) return false;
+    *mapped = true;
+    return st->min_page_shift >= kMipsSoftTlbPageShift;
+}
+
 void CERFENGINE_FASTCALL MipsMmu::TlbWriteIndexedHelper(MipsMmu* mmu) {
     mmu->tlb_.write_indexed(mmu->tlb_.context, mmu->context_);
 }
@@ -70,6 +93,7 @@ void CERFENGINE_FASTCALL MipsMmu::TlbProbeHelper(MipsMmu* mmu) {
 
 void CERFENGINE_FASTCALL MipsMmu::TlbReadHelper(MipsMmu* mmu) {
     mmu->tlb_.read(mmu->tlb_.context, mmu->context_);
+    mmu->context_.InvalidateMappedTranslations();
 }
 
 }
